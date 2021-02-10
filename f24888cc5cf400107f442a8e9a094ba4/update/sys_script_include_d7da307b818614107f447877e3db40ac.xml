@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_snc_lab_man.cl_ml_fix_util</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>cl_ml_fix_util</name>
+        <script><![CDATA[var cl_ml_fix_util = Class.create();
+cl_ml_fix_util.prototype = {
+    initialize: function() {},
+	
+    setMLProps: function() {
+		if(gs.getProperty('glide.servlet.uri').indexOf('.lab.service-now.com') == -1) return;
+		
+        var predictorProp = 'glide.prediction_service.url';
+        var schedulerProp = 'glide.shared_service_scheduler.url';
+        var schedulerPassProp = 'sn_apprepo.credential';
+        var instanceName = gs.getProperty('instance_name') + '';
+        var instanceId = gs.getProperty('instance_id') + '';
+        var managementServer = gs.getProperty('cl.management.host', 'cloudlabs');
+        var managementServerUrl = 'https://' + managementServer + '.service-now.com';
+        var bundleNameRestEndpointPath = '/api/snc/v1/cloud_labs_lab_managment/getLabBundleNames/';
+        var bundlePropertiesRestEndpointPath = '/api/snc/v1/cloud_labs_lab_managment/getLabBundleProperties/';
+
+        if (instanceName == '') {
+            gs.warn('setMLProps: Unable to find instance name.', 'IC');
+            return;
+        }
+
+        // Find out the name of our lab bundle based on our lab ID
+        var bundleNameRestRequest = new sn_ws.RESTMessageV2();
+        bundleNameRestRequest.setHttpMethod('GET');
+        bundleNameRestRequest.setEndpoint(encodeURI(managementServerUrl + bundleNameRestEndpointPath + instanceName));
+        var bundleNameResponse = bundleNameRestRequest.execute();
+        if (bundleNameResponse.getStatusCode() != 200) {
+            gs.warn('setMLProps: Bundle Name request failed: ' + bundleNameResponse.getStatusCode() + " : " + bundleNameResponse.getErrorMessage());
+            return;
+        }
+        var bundleNameResponseBodyJSON = bundleNameResponse.getBody();
+        var bundleNameResponseBodyObj = JSON.parse(bundleNameResponseBodyJSON);
+        var bundleName = bundleNameResponseBodyObj.names[0] + '';
+        if (bundleName == '' || bundleName == 'undefined') {
+            gs.warn('SetMLProps: No bundle found for the instance');
+            return;
+        }
+
+        // Get our bundle properties based our lab bundle
+        var bundlePropertiesRestRequest = new sn_ws.RESTMessageV2();
+        bundlePropertiesRestRequest.setHttpMethod('GET');
+        bundlePropertiesRestRequest.setEndpoint(encodeURI(managementServerUrl + bundlePropertiesRestEndpointPath + bundleName));
+        var bundlePropertiesResponse = bundlePropertiesRestRequest.execute();
+        if (bundlePropertiesResponse.getStatusCode() != 200) {
+            gs.warn('setMLProps: Bundle Properties request failed: ' + bundlePropertiesResponse.getStatusCode() + " : " + bundlePropertiesResponse.getErrorMessage());
+            return;
+        }
+        var bundlePropertiesResponseBodyJSON = bundlePropertiesResponse.getBody();
+        var bundlePropertiesResponseBodyObj = JSON.parse(bundlePropertiesResponseBodyJSON);
+
+        // Extract properties from response
+        var predictorUrl = bundlePropertiesResponseBodyObj.predictor_url + '';
+        var schedulerUrl = bundlePropertiesResponseBodyObj.scheduler_url + '';
+        var schedulerRegistrationUser = bundlePropertiesResponseBodyObj.scheduler_registration_user + '';
+        var schedulerPassword = bundlePropertiesResponseBodyObj.scheduler_password + '';
+        var schedulerInstanceReservationServicePath = bundlePropertiesResponseBodyObj.instance_reservation_path + '';
+
+
+        // Validate we have everything we need to setup local properties & register with scheduler
+        if (predictorUrl == '' || predictorUrl == 'undefined') {
+            gs.warn('setMLProps: No predictor URL found.');
+            return;
+        }
+
+        if (schedulerUrl == '' || schedulerUrl == 'undefined') {
+            gs.warn('setMLProps: No scheduler URL found.');
+            return;
+        }
+
+        if (schedulerPassword == '' || schedulerPassword == 'undefined') {
+            gs.warn('setMLProps: No scheduler password found.');
+        }
+
+        if (schedulerRegistrationUser == '' || schedulerRegistrationUser == 'undefined') {
+            gs.warn('setMLProps: No scheduler user found.');
+        }
+
+        if (schedulerInstanceReservationServicePath == '' || schedulerInstanceReservationServicePath == 'undefined') {
+            gs.warn('setMLProps: No path to scheduler reservation service found.');
+            return;
+        }
+
+        // Set the necessary local properties
+        gs.setProperty(predictorProp, predictorUrl);
+        gs.setProperty(schedulerProp, schedulerUrl);
+        gs.setProperty(schedulerPassProp, schedulerPassword);
+
+        // Call the scheduler to register ourselves
+        var schedulerRegistrationServiceRequestBodyObj = {
+            instance_name: instanceName,
+            instance_id: instanceId,
+            password: schedulerPassword,
+        };
+        var schedulerRegistrationServiceRequestBodyJSON = JSON.stringify(schedulerRegistrationServiceRequestBodyObj);
+
+        var schedulerRegistrationServiceRequest = new sn_ws.RESTMessageV2();
+        schedulerRegistrationServiceRequest.setHttpMethod('POST');
+        schedulerRegistrationServiceRequest.setEndpoint(encodeURI(schedulerUrl + schedulerInstanceReservationServicePath));
+        schedulerRegistrationServiceRequest.setBasicAuth(schedulerRegistrationUser, schedulerPassword);
+        schedulerRegistrationServiceRequest.setRequestBody(schedulerRegistrationServiceRequestBodyJSON);
+
+        var schedulerRegistrationServiceResponse = schedulerRegistrationServiceRequest.execute();
+        if (schedulerRegistrationServiceResponse.getStatusCode() != 200) {
+            gs.warn('setMLProps: Scheduler Instance Registration request failed: ' + schedulerRegistrationServiceResponse.getStatusCode() + " : " + schedulerRegistrationServiceResponse.getErrorMessage());
+            return;
+        }
+        gs.warn('setMLProps: Machine Learning Properties re-sync completed.');
+    },
+	
+    type: 'cl_ml_fix_util'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>eric.williams</sys_created_by>
+        <sys_created_on>2020-07-23 13:11:03</sys_created_on>
+        <sys_id>d7da307b818614107f447877e3db40ac</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>cl_ml_fix_util</sys_name>
+        <sys_package display_value="Lab Management" source="x_snc_lab_man">f24888cc5cf400107f442a8e9a094ba4</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Lab Management">f24888cc5cf400107f442a8e9a094ba4</sys_scope>
+        <sys_update_name>sys_script_include_d7da307b818614107f447877e3db40ac</sys_update_name>
+        <sys_updated_by>eric.williams</sys_updated_by>
+        <sys_updated_on>2020-07-23 13:14:22</sys_updated_on>
+    </sys_script_include>
+</record_update>
